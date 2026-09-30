@@ -173,3 +173,22 @@ def test_compile_small_edl(tmp_path):
     video.compile_edl(tmp_path / "edl.json", str(tmp_path / "out.mp4"))
     info = video.probe(tmp_path / "out.mp4")
     assert abs(info["duration"] - (2 + 2 + 1.5)) < 0.15 and info["audio"]
+
+
+# --------------------------------------------------------------------------- linux / proton
+
+def test_proton_saves_case_insensitive(tmp_path):
+    pfx = tmp_path / "pfx"
+    (pfx / "drive_c/users/steamuser/AppData/Local/Pal/Saved").mkdir(parents=True)
+    saves = scan.save_hints("Palworld", {"project": "pal"}, pfx)
+    assert str(pfx / "drive_c/users/steamuser/AppData/Local/Pal/Saved") in saves
+
+
+def test_hypr_keycodes_match_windows_vk():
+    from um import hypr
+    assert hypr.keycode("0x1B") == hypr.keycode("esc") == 1
+    assert hypr.keycode("0x41") == hypr.keycode("a") == 30
+    assert hypr.keycode("0x74") == hypr.keycode("f5") == 63
+    assert hypr.keycode("32") == hypr.keycode("space") == 57
+    with pytest.raises(RuntimeError):
+        hypr.keycode("0xFF")

@@ -10,6 +10,9 @@
     um video mux C:\\caps\\take1.mkv C:\\caps\\take1.audio.raw C:\\caps\\take1.json out.mp4
     um win reg get "HKCU\\Software\\Foo" [value] | um win reg set KEY VALUE DATA [--type REG_DWORD]
 
+On Linux under Hyprland the same commands use um/hypr.py (grim, gpu-screen-recorder, uinput, the Proton
+prefix); details in um/hypr.py and skills/game-automation.
+
 Why these tools: games render with the GPU, so GDI screen grabs are black - Windows.Graphics.Capture
 (ffmpeg's gfxcapture) gets the real frames of one window even when covered. Many games talk to WASAPI
 directly, so the only clean way to get just the game's sound is a process-loopback capture. Input goes
@@ -31,6 +34,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from um import hypr
 from um.common import die, is_windows, is_wsl, to_posix, to_win
 
 HERE = Path(__file__).resolve().parent
@@ -40,8 +44,12 @@ FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffm
 
 def _check_platform():
     if not (is_windows() or is_wsl()):
-        die("`um win` drives Windows games (native Windows or WSL). On Linux use xdotool/ydotool + ffmpeg x11grab/pipewire; "
-            "on macOS use screencapture + ffmpeg avfoundation (see skills/game-automation).")
+        die("`um win` drives Windows games (native Windows or WSL) and Linux games under Hyprland. Elsewhere on Linux use "
+            "xdotool/ydotool + ffmpeg x11grab/pipewire; on macOS use screencapture + ffmpeg avfoundation (see skills/game-automation).")
+
+
+def linux() -> bool:
+    return not (is_windows() or is_wsl()) and hypr.available()
 
 
 def ps_exe() -> str:
@@ -363,7 +371,44 @@ def reg(action: str, key: str, value: str | None = None, data: str | None = None
 # --------------------------------------------------------------------------- CLI
 
 
+def main_linux(a):
+    c = a.cmd
+    if c == "setup":
+        hypr.setup(a)
+    elif c == "ps":
+        for p in hypr.processes(a.name):
+            print(f"{p['Id']:>7}  {p['ProcessName']:28} {p['Class']:20} {p['MainWindowTitle']}")
+    elif c == "kill":
+        hypr.kill(a.pid)
+    elif c == "launch":
+        hypr.launch(a.target, a.args, a.steam)
+    elif c == "shot":
+        print(hypr.shot(a.output, a.exe, a.title, a.cls, a.scale))
+    elif c == "drive":
+        d = hypr.Drive(a.proc)
+        print(d.ready)
+        try:
+            for line in a.commands:
+                print(line, "->", d.cmd(line, retry=not a.no_retry))
+        finally:
+            d.close()
+    elif c == "record":
+        crop = [int(v) for v in a.crop.split(":")] if a.crop else None
+        rec = hypr.Recorder(exe=a.exe, out=a.out, title=a.title, cls=a.cls, fps=a.fps, audio=not a.no_audio, crop=crop).start()
+        try:
+            if a.seconds:
+                time.sleep(a.seconds)
+            else:
+                input("recording - press Enter to stop ")
+        finally:
+            print(json.dumps(rec.stop(), indent=1))
+    elif c == "reg":
+        hypr.reg(a.action, a.key, a.value, a.data, a.type, a.appid)
+
+
 def main(a):
+    if linux():
+        return main_linux(a)
     c = a.cmd
     if c == "setup":
         setup(a)
@@ -400,7 +445,7 @@ def main(a):
 
 def register(sub):
     import argparse
-    p = sub.add_parser("win", help="Windows/WSL: screenshots, recording with game-only audio, input, processes",
+    p = sub.add_parser("win", help="Windows/WSL or Linux+Hyprland: screenshots, recording with game-only audio, input, processes",
                        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     cs = p.add_subparsers(dest="cmd", metavar="<cmd>")
     q = cs.add_parser("setup", help="install the PowerShell tools and a gfxcapture-capable ffmpeg")
@@ -431,6 +476,7 @@ def register(sub):
         q.add_argument("--exe", help="window's executable name, e.g. AoE2DE_s.exe (regex)")
         q.add_argument("--hwnd", type=int)
         q.add_argument("--title", help="window title regex")
+        q.add_argument("--class", dest="cls", help="Linux/Hyprland: window class regex (Proton: steam_app_<appid>)")
         q.set_defaults(func=main)
     q = cs.add_parser("drive", help="send WinDrive commands to a game window")
     q.add_argument("--proc", required=True, help="process name without .exe")
@@ -443,4 +489,5 @@ def register(sub):
     q.add_argument("value", nargs="?")
     q.add_argument("data", nargs="?")
     q.add_argument("--type", default="REG_DWORD")
+    q.add_argument("--appid", help="Linux: Steam appid whose Proton prefix holds the registry")
     q.set_defaults(func=main)

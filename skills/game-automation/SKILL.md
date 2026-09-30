@@ -86,8 +86,17 @@ the game window's **client area**.
 - **Linux (X11):** `xdotool search --name "Game" windowactivate --sync key Escape`, `xdotool mousemove
   --window $W 640 360 click 1`. Screenshots: `import -window $(xdotool search --name Game) shot.png`, or
   ffmpeg `x11grab`.
-- **Linux (Wayland):** ydotool + `grim`. Proton games are Windows games under Wine: launch options
-  (`WINEDLLOVERRIDES`, `PROTON_LOG=1`) go in Steam.
+- **Linux (Hyprland):** `um win` works as on Windows (backend in `um/hypr.py`). Run `um win setup` first.
+  - Pick windows by `--exe` (Proton exes too), `--title` or `--class` (Proton games are `steam_app_<appid>`).
+  - `shot` uses grim's toplevel capture: the window can be covered or on another workspace.
+  - `record` captures the window's screen region, so keep it visible. The game's PipeWire stream is muxed
+    into the .mkv, so skip `um video mux`.
+  - `drive` speaks the WinDrive protocol (Windows VK codes or names like `esc`, `f5`) through uinput and
+    only while the game is the active window. `idle` returns `unknown`: ask before long sessions.
+  - `reg` edits the registry inside the Proton prefix (`--appid`).
+- **Linux (other Wayland):** ydotool + `grim`.
+- **Proton:** games are Windows games under Wine. Launch options (`WINEDLLOVERRIDES`, `PROTON_LOG=1`) go in
+  Steam; saves and the registry live in `steamapps/compatdata/<appid>/pfx` (`um scan` shows it).
 - **macOS:** `screencapture -l <windowid> shot.png` (window id via `GetWindowID` or AppleScript),
   `osascript` / `cliclick` for input. Input and screen recording need Accessibility and Screen Recording
   permission for the terminal.

@@ -89,6 +89,30 @@ def steam_roots() -> list[Path]:
     return out
 
 
+def proton_prefix(appid: str | None) -> Path | None:
+    """Linux: the game's Proton prefix (steamapps/compatdata/<appid>/pfx) in any Steam library."""
+    if not appid or is_windows() or is_wsl():
+        return None
+    for root in steam_roots():
+        libs = [root]
+        lf = root / "steamapps" / "libraryfolders.vdf"
+        if lf.exists():
+            data = _vdf(lf.read_text(errors="replace"))
+            libs += [Path(v["path"]) for v in (data.get("libraryfolders") or {}).values() if isinstance(v, dict) and v.get("path")]
+        for lib in libs:
+            pfx = lib / "steamapps" / "compatdata" / str(appid) / "pfx"
+            if (pfx / "drive_c").is_dir():
+                return pfx
+    return None
+
+
+def proton_folders(pfx: Path) -> dict:
+    """The same shell folders as win_folders(), inside a Proton prefix."""
+    prof = pfx / "drive_c" / "users" / "steamuser"
+    return dict(profile=str(prof), documents=str(prof / "Documents"), appdata=str(prof / "AppData" / "Roaming"),
+                localappdata=str(prof / "AppData" / "Local"))
+
+
 def steam_games() -> list[dict]:
     games, libs = [], []
     for root in steam_roots():
@@ -580,9 +604,23 @@ def detect(ix: Index) -> tuple[list[tuple[str, int, list[str], dict]], dict]:
     return hits, facts
 
 
-def save_hints(name: str, det: dict) -> list[str]:
-    """Existing folders where this game probably keeps saves/config (Windows side)."""
-    wf = win_folders()
+def _ci_path(p: Path) -> Path:
+    """Case-insensitive lookup, for Windows names inside a Proton prefix ("pal/saved" -> "Pal/Saved")."""
+    cur = Path(p.anchor)
+    for part in p.parts[1:]:
+        if (cur / part).exists():
+            cur = cur / part
+            continue
+        try:
+            cur = next((c for c in cur.iterdir() if c.name.lower() == part.lower()), cur / part)
+        except OSError:
+            return p
+    return cur
+
+
+def save_hints(name: str, det: dict, pfx: Path | None = None) -> list[str]:
+    """Existing folders where this game probably keeps saves/config (Windows side, or its Proton prefix)."""
+    wf = proton_folders(pfx) if pfx else win_folders()
     prof, docs = wf.get("profile"), wf.get("documents")
     appdata, local = wf.get("appdata"), wf.get("localappdata")
     base = re.sub(r"[:®™]", "", name or "")
@@ -606,6 +644,8 @@ def save_hints(name: str, det: dict) -> list[str]:
         cands += [Path.home() / ".local/share" / n for n in names] + [Path.home() / ".config" / n for n in names]
     out, seen = [], set()
     for c in cands:
+        if pfx and not c.is_dir():
+            c = _ci_path(c)
         try:
             if c.is_dir() and str(c) not in seen:
                 seen.add(str(c))
@@ -644,6 +684,10 @@ def scan(query: str) -> dict:
                         "many titles need the anti-cheat disabled via an official offline launch option - do not bypass it")
     if online:
         warnings.append(f"'{online}' is an online competitive game: modding its client breaks the ToS and gets accounts banned - stop, or use official tools only (Workshop/creative modes)")
+    pfx = proton_prefix(game.get("appid")) if game.get("store") == "steam" else None
+    if pfx:
+        warnings.append("runs through Proton: DLL-proxy loaders (BepInEx winhttp, UE4SS dwmapi, dinput8/version/winmm) only load with "
+                        'a Steam launch option like WINEDLLOVERRIDES="winhttp=n,b" %command% (use the proxy DLL\'s name)')
     if any(l == "ScriptHookV" for l in loaders) and "rage" in key:
         warnings.append("ScriptHookV only works in story mode; launch GTA offline")
     report = dict(
@@ -651,7 +695,7 @@ def scan(query: str) -> dict:
         engine=dict(key=key, label=label, confidence=score, evidence=ev, **{k: v for k, v in det.items() if v not in (None, "")}),
         other_engine_signals=[dict(key=h[0], evidence=h[2]) for h in hits[1:4]],
         anti_cheat=anti, mod_loaders_installed=loaders, mod_folders=moddirs,
-        workshop=game.get("workshop"), saves=save_hints(name, det),
+        workshop=game.get("workshop"), saves=save_hints(name, det, pfx), proton_prefix=str(pfx) if pfx else None,
         executables=facts.get("executables", {}), routes=routes, warnings=warnings,
         playbook=f"skills/mod-any-game/references/engines/{routes[0]['playbook']}",
         files_indexed=len(ix.files), index_truncated=ix.truncated,
@@ -678,6 +722,8 @@ def format_report(r: dict) -> str:
         lines.append(f"  mod dirs:  {', '.join(r['mod_folders'])}")
     if r.get("workshop"):
         lines.append(f"  workshop:  {r['workshop']}")
+    if r.get("proton_prefix"):
+        lines.append(f"  proton:    {r['proton_prefix']}")
     if r["saves"]:
         lines.append("  saves:     " + "\n             ".join(r["saves"]))
     lines.append("  routes:")

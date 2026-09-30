@@ -8,7 +8,8 @@
 
 ## Route 1: UE4SS (scripting and hooks, no engine recompile)
 RE-UE4SS (github.com/UE4SS-RE/RE-UE4SS) injects into the game. Put its `dwmapi.dll` (newer builds) or
-`xinput1_3.dll` proxy plus the `ue4ss/` folder next to the shipping exe.
+`xinput1_3.dll` proxy plus the `ue4ss/` folder next to the shipping exe. Proton/Linux: set the launch option
+`WINEDLLOVERRIDES="dwmapi=n,b" %command%` (or `xinput1_3=n,b`), or Wine loads its own DLL instead.
 
 **What you get:**
 - **Lua mods** (`ue4ss/Mods/<Mod>/Scripts/main.lua`, enabled in `mods.txt`):

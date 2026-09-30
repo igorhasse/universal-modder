@@ -37,7 +37,8 @@ server and the `um fal` CLI:
 export FAL_KEY=...
 ```
 You also need Python 3.10+ and ffmpeg. `uv` is recommended; the CLI sets up its own env with it. Blender is
-needed for 3D → sprite renders. Windows games are driven natively or from WSL.
+needed for 3D → sprite renders. Windows games are driven natively or from WSL; on Linux, native and Proton games
+are driven under Hyprland (grim, gpu-screen-recorder, uinput; check with `um win setup`).
 
 ## Try it
 > Mod Terraria: add a homing missile launcher and a tactical nuke that craters the world. Make the sprites with fal.

@@ -11,7 +11,7 @@ vertical slice → assets → verify in game → showcase → publish.
   - `scan`: installed games, engine, anti-cheat, loaders, saves, routes
   - `fal`: sprites, textures, PBR, 3D, rigs, SFX, music, voice, video
   - `sprite`, `render3d`: art → engine-ready frames
-  - `win`: launch / screenshot / input / record on Windows, also from WSL
+  - `win`: launch / screenshot / input / record on Windows, also from WSL; Linux under Hyprland via `um/hypr.py`
   - `video`: contact sheets, EDL-based showcase edits, muxing
   - `backup`: snapshot / restore saves
   - `publish`: pre-release lint
